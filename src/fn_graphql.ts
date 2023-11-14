@@ -1,7 +1,7 @@
 import { schema } from './schema'
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda'
 import CreateLambdaApi from 'lambda-api'
-import { getGraphQLParameters, processRequest } from 'graphql-helix'
+import { getGraphQLParameters, processRequest, renderGraphiQL, shouldRenderGraphiQL } from 'graphql-helix'
 import type { API, HandlerFunction } from 'lambda-api'
 import type { GraphQLSchema } from 'graphql'
 
@@ -29,27 +29,32 @@ export const graphqlApi = /*#__PURE__*/ <TContext>(
       query: req.query,
     }
 
-    const { query, variables, operationName } = getGraphQLParameters(request)
-
-    const result = await processRequest({
-      schema,
-      query,
-      variables,
-      operationName,
-      request,
-      contextFactory,
-    })
-
-    if (result.type === 'RESPONSE') {
-      result.headers.forEach(({ name, value }) => {
-        res.header(name, value)
-      })
-      res.status(result.status)
-      res.json(result.payload)
+    if (shouldRenderGraphiQL(request)) {
+      res.header('Content-Type', 'text/html');
+      res.send(renderGraphiQL());
     } else {
-      req.log.error(`Unhandled: ${result.type}`)
-      res.error(`Unhandled: ${result.type}`)
-    }
+      const { query, variables, operationName } = getGraphQLParameters(request)
+
+        const result = await processRequest({
+          schema,
+          query,
+          variables,
+          operationName,
+          request,
+          contextFactory,
+        })
+    
+        if (result.type === 'RESPONSE') {
+          result.headers.forEach(({ name, value }) => {
+            res.header(name, value)
+          })
+          res.status(result.status)
+          res.json(result.payload)
+        } else {
+          req.log.error(`Unhandled: ${result.type}`)
+          res.error(`Unhandled: ${result.type}`)
+        }
+      }
   }
 }
 
